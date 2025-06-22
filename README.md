@@ -1,103 +1,403 @@
-# React + Encore TS Web App Starter
+# CMS React Encore - Full-Stack Authentication System
 
-This is an [Encore](https://encore.dev/) + [React](https://react.dev/) project starter. It's a great way to learn how to combine Encore's backend 
-capabilities with a modern web framework — perfect for building a web app.
+A modern full-stack application built with **Encore.ts** (TypeScript backend framework) and **React 18** frontend, featuring JWT-based authentication with HTTP-only cookies, Redux state management, and comprehensive password management.
 
-## Developing locally
+## 🚀 Features
 
-### Prerequisite: Installing Encore
+### Authentication System
+- **JWT + HTTP-only Cookies**: Secure, stateless authentication perfect for microservices
+- **Dual Token Strategy**: Short-lived access tokens (30 min) + long-lived refresh tokens (7 days)
+- **Automatic Token Refresh**: Seamless token renewal without user intervention
+- **Session Management**: Server-side token revocation and session invalidation
+- **Password Security**: bcrypt hashing with salt rounds for secure password storage
 
-If this is the first time you're using Encore, you first need to install the CLI that runs the local development
-environment. Use the appropriate command for your system:
+### User Management
+- **User Registration**: Account creation with email validation
+- **User Login**: Secure authentication with error handling
+- **Password Reset**: Email-based password reset flow (console logging for demo)
+- **Password Change**: Authenticated users can change passwords
+- **User Profile**: View current user information
 
-- **macOS:** `brew install encoredev/tap/encore`
-- **Linux:** `curl -L https://encore.dev/install.sh | bash`
-- **Windows:** `iwr https://encore.dev/install.ps1 | iex`
+### Frontend Features
+- **React 18**: Modern React with hooks and context
+- **TypeScript**: Full type safety across the application
+- **Tailwind CSS**: Beautiful, responsive UI design
+- **Toast Notifications**: Real-time feedback with Sonner
+- **Loading States**: Comprehensive loading indicators
+- **Error Handling**: Graceful error handling with user-friendly messages
+- **Responsive Design**: Mobile-first responsive design
 
-When you have installed Encore, run:
+### Backend Features
+- **Encore.ts**: Type-safe API endpoints with automatic validation
+- **PostgreSQL**: Robust database with migrations
+- **Raw Endpoints**: Custom cookie management for authentication
+- **CORS Configuration**: Proper cross-origin setup for development
+- **Database Migrations**: Version-controlled schema changes
+- **Security**: JWT token validation and revocation
 
-```bash
-encore app create --example=ts/react-starter
+## ��️ Architecture
+
+### Backend (Encore.ts)
+- **Framework**: Encore.ts with PostgreSQL database
+- **Authentication**: JWT tokens with HTTP-only cookies
+- **Security**: bcrypt password hashing, automatic token refresh
+- **APIs**: RESTful endpoints with built-in validation
+
+### Frontend (React + Redux)
+- **State Management**: Redux Toolkit with RTK Query
+- **Authentication**: Automatic token refresh and redirect handling
+- **UI**: Tailwind CSS with responsive design
+- **Notifications**: Sonner toast notifications
+
+## 📁 Project Structure
+
+```
+cms-react-encore/
+├── backend/                    # Encore.ts backend
+│   ├── auth/                  # Authentication service
+│   │   ├── encore.service.ts  # Service definition
+│   │   ├── db.ts             # Database configuration
+│   │   ├── jwt.ts            # JWT utilities
+│   │   ├── auth.ts           # Authentication endpoints
+│   │   └── migrations/       # Database migrations
+│   └── encore.app            # App configuration with CORS
+├── frontend/                  # React frontend
+│   ├── src/
+│   │   ├── store/            # Redux store and slices
+│   │   │   ├── store.ts      # Store configuration
+│   │   │   ├── authSlice.ts  # Authentication state management
+│   │   │   └── hooks.ts      # Typed Redux hooks
+│   │   ├── components/       # React components
+│   │   │   ├── AuthGuard.tsx # Route protection
+│   │   │   ├── AuthForm.tsx  # Login/signup form
+│   │   │   ├── Dashboard.tsx # Protected dashboard
+│   │   │   ├── ForgotPassword.tsx
+│   │   │   ├── ResetPassword.tsx
+│   │   │   └── ChangePassword.tsx
+│   │   └── App.tsx          # Main app with Redux Provider
+│   └── package.json
+└── package.json              # Root package manager
 ```
 
-## Running locally
+## 🚀 Quick Start
 
-Start the Encore backend:
-```bash
-encore run
-```
+### Prerequisites
+- Node.js 18+ and npm
+- Encore CLI: `npm install -g @encore/cli`
 
-In another terminal window, start the Vite + React frontend:
-```bash
-npm run dev
-```
+### Installation & Setup
 
-Go to <http://localhost:5173/> in the browser to see the example frontend.
+1. **Clone and install dependencies:**
+   ```bash
+   git clone <repository>
+   cd cms-react-encore
+   npm install
+   ```
 
-You can also access Encore's [local developer dashboard](https://encore.dev/docs/observability/dev-dash) on <http://localhost:9400/> to view traces, API documentation, and more.
+2. **Set up JWT secrets for local development:**
+   ```bash
+   cd backend
+   encore secret set --type local JWT_ACCESS_SECRET
+   encore secret set --type local JWT_REFRESH_SECRET
+   ```
 
-### Generating a request client
+3. **Start both servers:**
+   ```bash
+   # Terminal 1: Backend (http://127.0.0.1:4000)
+   npm run backend
+   
+   # Terminal 2: Frontend (http://localhost:5173)
+   npm run frontend
+   ```
 
-Keep the contract between the backend and frontend in sync by regenerating the request client whenever you make a change
-to an Encore endpoint.
+4. **Access the application:**
+   - Frontend: http://localhost:5173
+   - Backend API: http://127.0.0.1:4000
+   - Encore Dashboard: http://127.0.0.1:9400
 
-```bash
-npm run gen # Will create a new request client app/lib/client.ts
-```
+## 🔐 Authentication System
 
-## Deployment
+### Redux-Based State Management
 
-For this starter, the backend will be deployed to Encore Cloud (or self-hosted) and the frontend to Vercel. The best way to go about doing that is to create a repo on GitHub and push the project there and then deploy the same codebase to both Encore Cloud and to Vercel.
+The application uses **Redux Toolkit** for centralized state management with the following structure:
 
-### Encore
-
-You can [self-host](https://encore.dev/docs/self-host/docker-build) the Encore backend or deploy it to Encore Cloud. Follow these steps to deploy your backend to a staging environment in Encore's free development cloud.
-
-1. Create a GitHub repo, commit and push the app.
-2. Open your app in the Encore [Cloud Dashboard](https://app.encore.dev).
-3. Go to your app settings and link your app to GitHub and select the repo you just created.
-4. Commit and push a change (can be anything) to GitHub to trigger a deploy.
-
-You can follow the deploy in the Cloud Dashboard. When the deploy is complete, your app will be available in the cloud.
-
-Then head over to the [Cloud Dashboard](https://app.encore.dev) to monitor your deployment and find your production URL.
-
-From there you can also connect your own AWS or GCP account to use for deployment.
-
-### React on Vercel
-
-The only thing you need to do is to create a new project on Vercel and point it to your newly created GitHup repo.
-
-## CORS configuration
-
-If you are running into CORS issues when calling your Encore API from your frontend then you may need to specify which
-origins are allowed to access your API (via browsers). You do this by specifying the `global_cors` key in the `encore.app`
-file, which has the following structure:
-
-```js
-global_cors: {
-  // allow_origins_without_credentials specifies the allowed origins for requests
-  // that don't include credentials. If nil it defaults to allowing all domains
-  // (equivalent to ["*"]).
-  "allow_origins_without_credentials": [
-    "<ORIGIN-GOES-HERE>"
-  ],
-        
-  // allow_origins_with_credentials specifies the allowed origins for requests
-  // that include credentials. If a request is made from an Origin in this list
-  // Encore responds with Access-Control-Allow-Origin: <Origin>.
-  //
-  // The URLs in this list may include wildcards (e.g. "https://*.example.com"
-  // or "https://*-myapp.example.com").
-  "allow_origins_with_credentials": [
-    "<DOMAIN-GOES-HERE>"
-  ]
+#### Auth Slice (`frontend/src/store/authSlice.ts`)
+```typescript
+interface AuthState {
+  user: User | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  error: string | null;
+  isInitialized: boolean;
 }
 ```
 
-More information on CORS configuration can be found here: https://encore.dev/docs/develop/cors
+#### Available Actions
+- `checkAuthStatus()` - Verify current authentication with auto-refresh
+- `loginUser({ email, password })` - User login
+- `signupUser({ email, password })` - User registration  
+- `logoutUser()` - User logout with session cleanup
+- `changePassword({ currentPassword, newPassword })` - Password change
+- `forgotPassword({ email })` - Password reset request
+- `resetPassword({ token, newPassword })` - Password reset completion
 
-## Learn More
+#### Usage Example
+```typescript
+import { useAppDispatch, useAppSelector } from '../store/hooks';
+import { loginUser, logoutUser } from '../store/authSlice';
 
-- [Encore Documentation](https://encore.dev/docs)
-- [Next.js Documentation](https://nextjs.org/docs)
+const MyComponent = () => {
+  const dispatch = useAppDispatch();
+  const { user, isAuthenticated, isLoading } = useAppSelector(state => state.auth);
+
+  const handleLogin = async () => {
+    try {
+      await dispatch(loginUser({ email, password })).unwrap();
+      // Success handled automatically
+    } catch (error) {
+      // Error handled by Redux slice
+    }
+  };
+};
+```
+
+### Authentication Guard
+
+The `AuthGuard` component automatically:
+- Checks authentication status on app load
+- Redirects unauthenticated users to login
+- Shows loading states during auth verification
+- Handles token refresh automatically
+
+```typescript
+<AuthGuard fallback={<AuthForm />}>
+  <Dashboard />
+</AuthGuard>
+```
+
+### JWT Token System
+
+**Access Tokens (15 minutes):**
+- Short-lived for API requests
+- Stored in HTTP-only cookies
+- Automatically refreshed
+
+**Refresh Tokens (7 days):**
+- Long-lived for session persistence
+- Secure HTTP-only cookies
+- Automatic rotation on refresh
+
+### Automatic Features
+
+1. **Token Refresh**: Automatically refreshes expired access tokens
+2. **Session Persistence**: Maintains login across browser sessions
+3. **Secure Logout**: Clears all tokens and cookies
+4. **Error Handling**: Comprehensive error states with user feedback
+5. **Loading States**: Visual feedback during authentication operations
+
+## 🛡️ Security Features
+
+### Backend Security
+- **JWT Authentication**: Stateless token-based auth
+- **HTTP-Only Cookies**: XSS protection
+- **Secure Cookies**: HTTPS enforcement in production
+- **CORS Configuration**: Restricted origins
+- **Password Hashing**: bcrypt with salt rounds
+- **Token Expiration**: Short-lived access tokens
+- **Refresh Token Rotation**: Enhanced security
+
+### Frontend Security
+- **Redux State Management**: Centralized auth state
+- **Automatic Redirects**: Unauthenticated access prevention
+- **Error Boundaries**: Graceful error handling
+- **Input Validation**: Client-side validation
+- **Toast Notifications**: User feedback without exposing sensitive data
+
+## 📡 API Endpoints
+
+### Authentication Endpoints
+```
+POST /auth/signup          # User registration
+POST /auth/signin          # User login  
+POST /auth/logout          # User logout
+GET  /auth/me             # Get current user
+POST /auth/refresh        # Refresh access token
+POST /auth/change-password # Change password (authenticated)
+POST /auth/forgot-password # Request password reset
+POST /auth/reset-password  # Reset password with token
+```
+
+### Example API Usage
+```typescript
+// All API calls include credentials automatically
+const response = await fetch('/auth/signin', {
+  method: 'POST',
+  credentials: 'include', // Important for cookies
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ email, password })
+});
+```
+
+## 🎨 UI Components
+
+### AuthForm
+- Combined login/signup form
+- Redux integration
+- Real-time validation
+- Loading states and error handling
+
+### Dashboard  
+- Protected route with user information
+- Counter demo with API integration
+- Password change functionality
+- Secure logout
+
+### Password Management
+- **ForgotPassword**: Email-based reset request
+- **ResetPassword**: Token-based password reset
+- **ChangePassword**: Authenticated password change
+
+## ⚙️ Configuration
+
+### CORS Setup (`backend/encore.app`)
+```cue
+global_cors: {
+    debug: true
+    allow_origins_with_credentials: [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173"
+    ]
+    allow_origins_without_credentials: ["*"]
+    allow_headers: ["Authorization", "Content-Type"]
+    expose_headers: ["*"]
+}
+```
+
+### Redux Store Configuration
+```typescript
+export const store = configureStore({
+  reducer: {
+    auth: authReducer,
+  },
+  middleware: (getDefaultMiddleware) =>
+    getDefaultMiddleware({
+      serializableCheck: {
+        ignoredActions: ['persist/PERSIST', 'persist/REHYDRATE'],
+      },
+    }),
+});
+```
+
+## 🧪 Development
+
+### Available Scripts
+```bash
+npm run backend          # Start Encore.ts backend
+npm run frontend         # Start React frontend  
+npm run dev             # Start both servers concurrently
+npm run build           # Build for production
+```
+
+### Database Management
+```bash
+cd backend
+encore db shell auth    # Access database shell
+encore db reset         # Reset database
+```
+
+### Secret Management
+```bash
+encore secret set --type local JWT_ACCESS_SECRET
+encore secret set --type prod JWT_ACCESS_SECRET
+encore secret list      # List all secrets
+```
+
+## 🔄 State Flow
+
+1. **App Initialization**: Redux store initializes, AuthGuard checks auth status
+2. **Authentication**: User logs in → Redux updates state → UI re-renders
+3. **Token Management**: Automatic refresh before expiration
+4. **Route Protection**: AuthGuard prevents access to protected routes
+5. **Logout**: Clears Redux state and HTTP-only cookies
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+**CORS Errors:**
+- Ensure backend is running on port 4000
+- Check `encore.app` CORS configuration
+- Verify frontend origin in allowed origins
+
+**Authentication Failures:**
+- Check JWT secrets are set: `encore secret list`
+- Verify cookies are enabled in browser
+- Check network tab for cookie headers
+
+**Redux State Issues:**
+- Use Redux DevTools for debugging
+- Check action dispatching with `unwrap()`
+- Verify error handling in components
+
+**Database Connection:**
+- Ensure PostgreSQL is running
+- Check database migrations: `encore db shell auth`
+
+## 🚀 Production Deployment
+
+### Backend (Encore Cloud)
+```bash
+git push encore main  # Deploy to Encore Cloud
+```
+
+### Environment Variables
+- Set production JWT secrets via Encore dashboard
+- Configure production CORS origins
+- Update database connection strings
+
+### Security Checklist
+- [ ] JWT secrets set for all environments
+- [ ] CORS configured for production domains
+- [ ] HTTPS enforced for cookies
+- [ ] Database backups configured
+- [ ] Error logging implemented
+
+## 📚 Technology Stack
+
+### Backend
+- **Encore.ts** - TypeScript backend framework
+- **PostgreSQL** - Database with migrations
+- **JWT** - JSON Web Tokens for authentication
+- **bcrypt** - Password hashing
+
+### Frontend  
+- **React 18** - UI library with hooks
+- **Redux Toolkit** - State management
+- **TypeScript** - Type safety
+- **Tailwind CSS** - Utility-first styling
+- **Vite** - Fast build tool
+- **Sonner** - Toast notifications
+
+### Development Tools
+- **Encore CLI** - Backend development
+- **Redux DevTools** - State debugging
+- **TypeScript** - Static type checking
+- **ESLint** - Code linting
+
+---
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test authentication flows
+5. Submit a pull request
+
+## 📄 License
+
+This project is licensed under the MIT License.
+
+---
+
+**Built with ❤️ using Encore.ts and React**

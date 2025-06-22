@@ -1,0 +1,22 @@
+{
+  "name": "cms-react-encore-backend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "encore run",
+    "build": "encore build",
+    "gen": "encore gen client --output=../frontend/src/lib/client.ts --env=local"
+  },
+  "dependencies": {
+    "@types/jsonwebtoken": "^9.0.10",
+    "bcrypt": "^5.1.1",
+    "encore.dev": "^1.48.5",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^5.0.2",
+    "@types/node": "^20.0.0",
+    "typescript": "~5.6.2"
+  }
+}

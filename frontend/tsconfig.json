@@ -19,23 +19,18 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
 
-    /* Types */
-    "types": ["node"],
-
     /* Paths */
+    "baseUrl": ".",
     "paths": {
       "~encore/*": [
-        "./encore.gen/*"
+        "../encore.gen/*"
       ]
     }
   },
   "include": [
-    "backend/**/*",
-    "frontend/src/**/*"
+    "src/**/*"
   ],
   "exclude": [
-    "node_modules",
-    "frontend/node_modules",
-    "backend/node_modules"
+    "node_modules"
   ]
-}
+} 
