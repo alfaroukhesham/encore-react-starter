@@ -10,13 +10,18 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:auth": "vitest run auth/auth.test.ts",
-    "test:users": "vitest run users/users.test.ts users/types.test.ts"
+    "test:users": "vitest run users/users.test.ts users/types.test.ts",
+    "test:content": "vitest run content/content.test.ts content/types.test.ts",
+    "test:media": "vitest run media/media.test.ts media/types.test.ts",
+    "test:notifications": "vitest run notifications/notifications.test.ts notifications/types.test.ts"
   },
   "dependencies": {
     "@types/jsonwebtoken": "^9.0.10",
+    "@types/uuid": "^10.0.0",
     "bcrypt": "^5.1.1",
     "encore.dev": "^1.48.5",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@types/bcrypt": "^5.0.2",
