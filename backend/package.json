@@ -9,7 +9,8 @@
     "gen": "encore gen client --output=../frontend/src/lib/client.ts --env=local",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:auth": "vitest run auth/auth.test.ts"
+    "test:auth": "vitest run auth/auth.test.ts",
+    "test:users": "vitest run users/users.test.ts users/types.test.ts"
   },
   "dependencies": {
     "@types/jsonwebtoken": "^9.0.10",
