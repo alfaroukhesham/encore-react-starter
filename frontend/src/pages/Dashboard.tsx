@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { logoutUser } from '../store/authSlice';
-import ChangePassword from './ChangePassword';
+import ChangePassword from '../components/forms/ChangePassword';
+import { TokenInfo } from '../components/ui';
 import { toast } from 'sonner';
 import Client, { Local } from '../lib/client';
 
@@ -145,6 +146,11 @@ const Dashboard: React.FC = () => {
               <span className="font-medium">Account ID:</span> {user.id}
             </p>
           </div>
+        </div>
+
+        {/* Token Information (Development/Debug) */}
+        <div className="mt-6 pt-6 border-t border-gray-200">
+          <TokenInfo />
         </div>
       </div>
 

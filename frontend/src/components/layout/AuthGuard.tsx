@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
-import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { checkAuthStatus } from '../store/authSlice';
+import { useAppDispatch, useAppSelector } from '../../store/hooks';
+import { checkAuthStatus } from '../../store/authSlice';
 
 interface AuthGuardProps {
   children: React.ReactNode;

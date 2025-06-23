@@ -1,12 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Provider } from 'react-redux';
 import { store } from './store/store';
 import { Toaster } from 'sonner';
-import AuthGuard from './components/AuthGuard';
-import AuthForm from './components/AuthForm';
-import Dashboard from './components/Dashboard';
-import ForgotPassword from './components/ForgotPassword';
-import ResetPassword from './components/ResetPassword';
+import { AuthGuard } from './components/layout';
+import { AuthForm, ForgotPassword, ResetPassword } from './components/forms';
+import { Dashboard } from './pages';
 
 type AppView = 'auth' | 'dashboard' | 'forgot-password' | 'reset-password';
 

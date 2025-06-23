@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { loginUser, signupUser, clearError } from '../store/authSlice';
+import { useAppDispatch, useAppSelector } from '../../store/hooks';
+import { loginUser, signupUser, clearError } from '../../store/authSlice';
 import { toast } from 'sonner';
 
 interface AuthFormProps {

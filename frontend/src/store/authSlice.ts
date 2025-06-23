@@ -1,9 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import Client, { Local } from '../lib/client';
-import { User, LoginResponse, MessageResponse, AuthError } from '../lib/auth-types';
-
-// Initialize Encore client
-const client = new Client(Local);
+import { authApi, authHelpers, TokenService } from '../services/api';
+import { User } from '../lib/auth-types';
 
 export interface AuthState {
   user: User | null;
@@ -13,45 +10,73 @@ export interface AuthState {
   isInitialized: boolean; // Track if we've checked initial auth status
 }
 
-// Helper function to parse auth response
-const parseAuthResponse = async (response: Response): Promise<User> => {
-  const data = await response.json();
-  // Handle both direct user response and wrapped response
-  return data.user || data;
-};
-
-// Helper function to handle auth errors
-const handleAuthError = (error: any) => {
-  if (error?.message?.includes('fetch') || error?.message?.includes('network')) {
-    return 'Connection error: Please check if the backend is running';
-  }
-  return error?.message || 'Authentication failed';
-};
-
-// Async thunks using Encore client
+// Async thunks using our API service
 export const checkAuthStatus = createAsyncThunk(
   'auth/checkAuthStatus',
   async (_, { rejectWithValue }) => {
     try {
-      const response = await client.auth.me("GET");
-      const user = await parseAuthResponse(response);
+      console.log('Checking auth status...');
+      
+      // First check if we have a valid token in localStorage
+      if (!TokenService.isAuthenticated()) {
+        console.log('No valid token found, user not authenticated');
+        return rejectWithValue(null);
+      }
+      
+      // If we have a token, try to get user info from it first
+      const userFromToken = TokenService.getUserFromToken();
+      if (userFromToken) {
+        console.log('Found user info in token:', userFromToken);
+        // We have user info from token, but let's verify with server
+        try {
+          const response = await authApi.me();
+          if (response.ok) {
+            const serverUser = await authHelpers.parseAuthResponse(response);
+            console.log('Server confirmed user:', serverUser);
+            return serverUser;
+          }
+        } catch (serverError) {
+          console.log('Server verification failed, but token is valid, using token data');
+          // Server call failed, but token is valid, use token data
+          return {
+            id: userFromToken.userId,
+            email: userFromToken.email,
+            is_verified: userFromToken.is_verified
+          } as User;
+        }
+      }
+      
+      // Fallback: try server call without token verification
+      const response = await authApi.me();
+      if (!response.ok) {
+        throw new Error('Failed to get user info');
+      }
+      const user = await authHelpers.parseAuthResponse(response);
       return user;
     } catch (error: any) {
+      console.log('Auth check failed:', error);
       // Try to refresh token if auth fails
       if (error?.status === 401) {
         try {
-          await client.auth.refresh("POST");
-          // If refresh succeeded, try getting user again
-          const refreshedResponse = await client.auth.me("GET");
-          const refreshedUser = await parseAuthResponse(refreshedResponse);
-          return refreshedUser;
+          const refreshResponse = await authApi.refresh();
+          if (refreshResponse.ok) {
+            // If refresh succeeded, try getting user again
+            const retryResponse = await authApi.me();
+            if (retryResponse.ok) {
+              const refreshedUser = await authHelpers.parseAuthResponse(retryResponse);
+              return refreshedUser;
+            }
+          }
         } catch (refreshError) {
-          // Silently fail for initial auth check - user just isn't logged in
+          console.log('Token refresh failed:', refreshError);
+          // Clear invalid tokens
+          TokenService.clearTokens();
           return rejectWithValue(null);
         }
       }
-      // Only show error for non-auth related issues
-      return rejectWithValue(handleAuthError(error));
+      // Clear tokens on any auth error
+      TokenService.clearTokens();
+      return rejectWithValue(null);
     }
   }
 );
@@ -60,11 +85,22 @@ export const loginUser = createAsyncThunk(
   'auth/loginUser',
   async ({ email, password }: { email: string; password: string }, { rejectWithValue }) => {
     try {
-      const response = await client.auth.signin("POST", JSON.stringify({ email, password }));
-      const user = await parseAuthResponse(response);
-      return user;
+      console.log('Attempting login for:', email);
+      const response = await authApi.login(email, password);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Login failed');
+      }
+      
+      const data = await response.json();
+      console.log('Login successful, received data:', data);
+      
+      // Return the user data
+      return data.user || data;
     } catch (error: any) {
-      return rejectWithValue(handleAuthError(error));
+      console.error('Login error:', error);
+      return rejectWithValue(authHelpers.handleAuthError(error));
     }
   }
 );
@@ -73,22 +109,36 @@ export const signupUser = createAsyncThunk(
   'auth/signupUser',
   async ({ email, password }: { email: string; password: string }, { rejectWithValue }) => {
     try {
-      const response = await client.auth.signup("POST", JSON.stringify({ email, password }));
-      const user = await parseAuthResponse(response);
-      return user;
+      console.log('Attempting signup for:', email);
+      const response = await authApi.register(email, password);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Registration failed');
+      }
+      
+      const data = await response.json();
+      console.log('Signup successful, received data:', data);
+      
+      // Return the user data
+      return data.user || data;
     } catch (error: any) {
-      return rejectWithValue(handleAuthError(error));
+      console.error('Signup error:', error);
+      return rejectWithValue(authHelpers.handleAuthError(error));
     }
   }
 );
 
 export const logoutUser = createAsyncThunk(
   'auth/logoutUser',
-  async (_, { rejectWithValue }) => {
+  async () => {
     try {
-      await client.auth.logout("POST");
+      console.log('Attempting logout');
+      await authApi.logout();
+      console.log('Logout successful');
       return null;
     } catch (error: any) {
+      console.log('Logout error (continuing anyway):', error);
       // Even if logout fails on server, we should clear local state
       return null;
     }
@@ -99,11 +149,15 @@ export const changePassword = createAsyncThunk(
   'auth/changePassword',
   async ({ currentPassword, newPassword }: { currentPassword: string; newPassword: string }, { rejectWithValue }) => {
     try {
-      const response = await client.auth.changePassword("POST", JSON.stringify({ currentPassword, newPassword }));
+      const response = await authApi.changePassword(currentPassword, newPassword);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Password change failed');
+      }
       const data = await response.json();
       return data.message;
     } catch (error: any) {
-      return rejectWithValue(handleAuthError(error));
+      return rejectWithValue(authHelpers.handleAuthError(error));
     }
   }
 );
@@ -112,10 +166,14 @@ export const forgotPassword = createAsyncThunk(
   'auth/forgotPassword',
   async ({ email }: { email: string }, { rejectWithValue }) => {
     try {
-      const response = await client.auth.forgotPassword({ email });
-      return response.message;
+      const result = await authApi.forgotPassword(email);
+      // The client method may return a direct result rather than a Response
+      if (typeof result === 'object' && 'message' in result) {
+        return result.message;
+      }
+      return 'Password reset email sent';
     } catch (error: any) {
-      return rejectWithValue(handleAuthError(error));
+      return rejectWithValue(authHelpers.handleAuthError(error));
     }
   }
 );
@@ -124,10 +182,14 @@ export const resetPassword = createAsyncThunk(
   'auth/resetPassword',
   async ({ token, newPassword }: { token: string; newPassword: string }, { rejectWithValue }) => {
     try {
-      const response = await client.auth.resetPassword({ token, newPassword });
-      return response.message;
+      const result = await authApi.resetPassword(token, newPassword);
+      // The client method may return a direct result rather than a Response
+      if (typeof result === 'object' && 'message' in result) {
+        return result.message;
+      }
+      return 'Password reset successful';
     } catch (error: any) {
-      return rejectWithValue(handleAuthError(error));
+      return rejectWithValue(authHelpers.handleAuthError(error));
     }
   }
 );
@@ -185,12 +247,14 @@ const authSlice = createSlice({
         state.error = null;
       })
       .addCase(loginUser.fulfilled, (state, action: PayloadAction<User>) => {
+        console.log('Login fulfilled with user:', action.payload);
         state.isLoading = false;
         state.user = action.payload;
         state.isAuthenticated = true;
         state.error = null;
       })
       .addCase(loginUser.rejected, (state, action) => {
+        console.log('Login rejected with error:', action.payload);
         state.isLoading = false;
         state.user = null;
         state.isAuthenticated = false;
@@ -203,12 +267,14 @@ const authSlice = createSlice({
         state.error = null;
       })
       .addCase(signupUser.fulfilled, (state, action: PayloadAction<User>) => {
+        console.log('Signup fulfilled with user:', action.payload);
         state.isLoading = false;
         state.user = action.payload;
         state.isAuthenticated = true;
         state.error = null;
       })
       .addCase(signupUser.rejected, (state, action) => {
+        console.log('Signup rejected with error:', action.payload);
         state.isLoading = false;
         state.user = null;
         state.isAuthenticated = false;
@@ -218,18 +284,22 @@ const authSlice = createSlice({
       // Logout user
       .addCase(logoutUser.pending, (state) => {
         state.isLoading = true;
+        state.error = null;
       })
       .addCase(logoutUser.fulfilled, (state) => {
+        console.log('Logout fulfilled');
         state.isLoading = false;
         state.user = null;
         state.isAuthenticated = false;
         state.error = null;
       })
-      .addCase(logoutUser.rejected, (state) => {
+      .addCase(logoutUser.rejected, (state, action) => {
+        console.log('Logout rejected (clearing state anyway)');
+        // Even if logout fails, clear the state
         state.isLoading = false;
         state.user = null;
         state.isAuthenticated = false;
-        state.error = null; // Don't show error for logout
+        state.error = null;
       })
       
       // Change password

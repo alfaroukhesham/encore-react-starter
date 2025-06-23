@@ -299,14 +299,29 @@ export const me = api.raw(
   { method: "GET", path: "/auth/me", expose: true },
   async (req, res) => {
     try {
-      // Parse cookies from request headers
-      const cookies = req.headers.cookie || '';
-      console.log('Raw cookies:', cookies);
-      const accessTokenMatch = cookies.match(/access_token=([^;]+)/);
-      const accessToken = accessTokenMatch ? accessTokenMatch[1] : null;
-      console.log('Extracted access token:', accessToken ? 'present' : 'missing');
+      let accessToken: string | null = null;
+
+      // First try to get token from Authorization header
+      const authHeader = req.headers.authorization;
+      console.log('Authorization header:', authHeader ? 'present' : 'missing');
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        accessToken = authHeader.substring(7); // Remove 'Bearer ' prefix
+        console.log('Extracted token from Authorization header');
+      }
+
+      // If not found in header, try cookies as fallback
+      if (!accessToken) {
+        const cookies = req.headers.cookie || '';
+        console.log('Raw cookies:', cookies);
+        const accessTokenMatch = cookies.match(/access_token=([^;]+)/);
+        accessToken = accessTokenMatch ? accessTokenMatch[1] : null;
+        if (accessToken) {
+          console.log('Extracted token from cookies');
+        }
+      }
 
       if (!accessToken) {
+        console.log('No access token found in Authorization header or cookies');
         res.writeHead(401, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ 
           code: "unauthenticated", 

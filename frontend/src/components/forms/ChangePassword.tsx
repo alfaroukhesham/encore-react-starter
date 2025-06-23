@@ -1,33 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { changePassword, clearError } from '../store/authSlice';
+import { useAppDispatch, useAppSelector } from '../../store/hooks';
+import { changePassword, clearError } from '../../store/authSlice';
 import { toast } from 'sonner';
 
 interface ChangePasswordProps {
   onClose: () => void;
 }
 
-// Base API URL
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
-
-// API helper function
-const apiCall = async (endpoint: string, options: RequestInit = {}) => {
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-    ...options,
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Unknown error' }));
-    throw { status: response.status, ...error };
-  }
-
-  return response.json();
-};
+// Note: Using Redux for API calls - no direct API calls needed here
 
 const ChangePassword: React.FC<ChangePasswordProps> = ({ onClose }) => {
   const dispatch = useAppDispatch();
