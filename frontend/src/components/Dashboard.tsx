@@ -3,27 +3,10 @@ import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { logoutUser } from '../store/authSlice';
 import ChangePassword from './ChangePassword';
 import { toast } from 'sonner';
+import Client, { Local } from '../lib/client';
 
-// API helper for counter (keeping this separate from auth)
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:4000";
-
-const apiCall = async (endpoint: string, options: RequestInit = {}) => {
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-    ...options,
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Unknown error' }));
-    throw { status: response.status, ...error };
-  }
-
-  return response.json();
-};
+// Initialize Encore client
+const client = new Client(Local);
 
 const Dashboard: React.FC = () => {
   const dispatch = useAppDispatch();
@@ -37,7 +20,7 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     const loadCounter = async () => {
       try {
-        const result = await apiCall('/counter', { method: 'GET' });
+        const result = await client.api.get();
         setCount(result.value);
       } catch (error) {
         console.error('Failed to load counter:', error);
@@ -61,7 +44,7 @@ const Dashboard: React.FC = () => {
   const incrementCounter = async () => {
     setIsIncrementing(true);
     try {
-      const result = await apiCall('/counter', { method: 'POST' });
+      const result = await client.api.increment();
       setCount(result.value);
     } catch (error: any) {
       console.error('Counter increment failed:', error);
@@ -92,6 +75,15 @@ const Dashboard: React.FC = () => {
           <p className="text-gray-600">
             Logged in as: <span className="font-medium">{user.email}</span>
           </p>
+          <div className="flex items-center justify-center mt-2">
+            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+              user.is_verified 
+                ? 'bg-green-100 text-green-800' 
+                : 'bg-yellow-100 text-yellow-800'
+            }`}>
+              {user.is_verified ? '✓ Verified' : '⚠ Unverified'}
+            </span>
+          </div>
           <p className="text-sm text-gray-500 mt-1">
             User ID: {user.id}
           </p>
@@ -142,6 +134,12 @@ const Dashboard: React.FC = () => {
           <div className="space-y-1">
             <p className="text-sm text-gray-600">
               <span className="font-medium">Email:</span> {user.email}
+            </p>
+            <p className="text-sm text-gray-600">
+              <span className="font-medium">Verified:</span> 
+              <span className={user.is_verified ? 'text-green-600' : 'text-yellow-600'}>
+                {user.is_verified ? 'Yes' : 'No'}
+              </span>
             </p>
             <p className="text-sm text-gray-600">
               <span className="font-medium">Account ID:</span> {user.id}

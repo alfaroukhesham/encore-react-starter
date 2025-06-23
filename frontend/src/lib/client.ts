@@ -109,14 +109,6 @@ export namespace api {
 }
 
 export namespace auth {
-    export interface ForgotPasswordRequest {
-        email: string
-    }
-
-    export interface ResetPasswordRequest {
-        token: string
-        newPassword: string
-    }
 
     export class ServiceClient {
         private baseClient: BaseClient
@@ -137,7 +129,7 @@ export namespace auth {
             return this.baseClient.callAPI(method, `/auth/change-password`, body, options)
         }
 
-        public async forgotPassword(params: ForgotPasswordRequest): Promise<{
+        public async forgotPassword(params: endpoints.ForgotPasswordRequest): Promise<{
     success: boolean
     message: string
 }> {
@@ -161,7 +153,7 @@ export namespace auth {
             return this.baseClient.callAPI(method, `/auth/refresh`, body, options)
         }
 
-        public async resetPassword(params: ResetPasswordRequest): Promise<{
+        public async resetPassword(params: endpoints.ResetPasswordRequest): Promise<{
     success: boolean
     message: string
 }> {
@@ -183,6 +175,17 @@ export namespace auth {
         public async signup(method: "POST", body?: RequestInit["body"], options?: CallParameters): Promise<globalThis.Response> {
             return this.baseClient.callAPI(method, `/auth/signup`, body, options)
         }
+    }
+}
+
+export namespace endpoints {
+    export interface ForgotPasswordRequest {
+        email: string
+    }
+
+    export interface ResetPasswordRequest {
+        token: string
+        newPassword: string
     }
 }
 

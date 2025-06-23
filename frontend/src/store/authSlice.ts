@@ -1,10 +1,9 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
+import Client, { Local } from '../lib/client';
+import { User, LoginResponse, MessageResponse, AuthError } from '../lib/auth-types';
 
-// Types
-export interface User {
-  id: string;
-  email: string;
-}
+// Initialize Encore client
+const client = new Client(Local);
 
 export interface AuthState {
   user: User | null;
@@ -14,42 +13,37 @@ export interface AuthState {
   isInitialized: boolean; // Track if we've checked initial auth status
 }
 
-// Base API URL with fallback
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:4000";
-
-// API helper function
-const apiCall = async (endpoint: string, options: RequestInit = {}) => {
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-    ...options,
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Unknown error' }));
-    throw { status: response.status, ...error };
-  }
-
-  return response.json();
+// Helper function to parse auth response
+const parseAuthResponse = async (response: Response): Promise<User> => {
+  const data = await response.json();
+  // Handle both direct user response and wrapped response
+  return data.user || data;
 };
 
-// Async thunks
+// Helper function to handle auth errors
+const handleAuthError = (error: any) => {
+  if (error?.message?.includes('fetch') || error?.message?.includes('network')) {
+    return 'Connection error: Please check if the backend is running';
+  }
+  return error?.message || 'Authentication failed';
+};
+
+// Async thunks using Encore client
 export const checkAuthStatus = createAsyncThunk(
   'auth/checkAuthStatus',
   async (_, { rejectWithValue }) => {
     try {
-      const user = await apiCall('/auth/me');
+      const response = await client.auth.me("GET");
+      const user = await parseAuthResponse(response);
       return user;
     } catch (error: any) {
       // Try to refresh token if auth fails
       if (error?.status === 401) {
         try {
-          await apiCall('/auth/refresh', { method: 'POST' });
+          await client.auth.refresh("POST");
           // If refresh succeeded, try getting user again
-          const refreshedUser = await apiCall('/auth/me');
+          const refreshedResponse = await client.auth.me("GET");
+          const refreshedUser = await parseAuthResponse(refreshedResponse);
           return refreshedUser;
         } catch (refreshError) {
           // Silently fail for initial auth check - user just isn't logged in
@@ -57,11 +51,7 @@ export const checkAuthStatus = createAsyncThunk(
         }
       }
       // Only show error for non-auth related issues
-      if (error?.message?.includes('fetch') || error?.message?.includes('network')) {
-        return rejectWithValue('Connection error: Please check if the backend is running');
-      }
-      // For other errors, silently fail
-      return rejectWithValue(null);
+      return rejectWithValue(handleAuthError(error));
     }
   }
 );
@@ -70,13 +60,11 @@ export const loginUser = createAsyncThunk(
   'auth/loginUser',
   async ({ email, password }: { email: string; password: string }, { rejectWithValue }) => {
     try {
-      const response = await apiCall('/auth/signin', {
-        method: 'POST',
-        body: JSON.stringify({ email, password }),
-      });
-      return response.user;
+      const response = await client.auth.signin("POST", JSON.stringify({ email, password }));
+      const user = await parseAuthResponse(response);
+      return user;
     } catch (error: any) {
-      return rejectWithValue(error?.message || 'Login failed');
+      return rejectWithValue(handleAuthError(error));
     }
   }
 );
@@ -85,13 +73,11 @@ export const signupUser = createAsyncThunk(
   'auth/signupUser',
   async ({ email, password }: { email: string; password: string }, { rejectWithValue }) => {
     try {
-      const response = await apiCall('/auth/signup', {
-        method: 'POST',
-        body: JSON.stringify({ email, password }),
-      });
-      return response.user;
+      const response = await client.auth.signup("POST", JSON.stringify({ email, password }));
+      const user = await parseAuthResponse(response);
+      return user;
     } catch (error: any) {
-      return rejectWithValue(error?.message || 'Signup failed');
+      return rejectWithValue(handleAuthError(error));
     }
   }
 );
@@ -100,7 +86,7 @@ export const logoutUser = createAsyncThunk(
   'auth/logoutUser',
   async (_, { rejectWithValue }) => {
     try {
-      await apiCall('/auth/logout', { method: 'POST' });
+      await client.auth.logout("POST");
       return null;
     } catch (error: any) {
       // Even if logout fails on server, we should clear local state
@@ -113,13 +99,11 @@ export const changePassword = createAsyncThunk(
   'auth/changePassword',
   async ({ currentPassword, newPassword }: { currentPassword: string; newPassword: string }, { rejectWithValue }) => {
     try {
-      const response = await apiCall('/auth/change-password', {
-        method: 'POST',
-        body: JSON.stringify({ currentPassword, newPassword }),
-      });
-      return response.message;
+      const response = await client.auth.changePassword("POST", JSON.stringify({ currentPassword, newPassword }));
+      const data = await response.json();
+      return data.message;
     } catch (error: any) {
-      return rejectWithValue(error?.message || 'Failed to change password');
+      return rejectWithValue(handleAuthError(error));
     }
   }
 );
@@ -128,13 +112,10 @@ export const forgotPassword = createAsyncThunk(
   'auth/forgotPassword',
   async ({ email }: { email: string }, { rejectWithValue }) => {
     try {
-      const response = await apiCall('/auth/forgot-password', {
-        method: 'POST',
-        body: JSON.stringify({ email }),
-      });
+      const response = await client.auth.forgotPassword({ email });
       return response.message;
     } catch (error: any) {
-      return rejectWithValue(error?.message || 'Failed to send reset email');
+      return rejectWithValue(handleAuthError(error));
     }
   }
 );
@@ -143,13 +124,10 @@ export const resetPassword = createAsyncThunk(
   'auth/resetPassword',
   async ({ token, newPassword }: { token: string; newPassword: string }, { rejectWithValue }) => {
     try {
-      const response = await apiCall('/auth/reset-password', {
-        method: 'POST',
-        body: JSON.stringify({ token, newPassword }),
-      });
+      const response = await client.auth.resetPassword({ token, newPassword });
       return response.message;
     } catch (error: any) {
-      return rejectWithValue(error?.message || 'Failed to reset password');
+      return rejectWithValue(handleAuthError(error));
     }
   }
 );
