@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "encore run",
     "build": "encore build",
-    "gen": "encore gen client --output=../frontend/src/lib/client.ts --env=local"
+    "gen": "encore gen client --output=../frontend/src/lib/client.ts --env=local",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:auth": "vitest run auth/auth.test.ts"
   },
   "dependencies": {
     "@types/jsonwebtoken": "^9.0.10",
@@ -17,6 +20,7 @@
   "devDependencies": {
     "@types/bcrypt": "^5.0.2",
     "@types/node": "^20.0.0",
-    "typescript": "~5.6.2"
+    "typescript": "~5.6.2",
+    "vitest": "^3.2.4"
   }
 }

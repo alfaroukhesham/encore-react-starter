@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 import { APIError, ErrCode } from 'encore.dev/api';
 import { secret } from 'encore.dev/config';
 import crypto from 'crypto';
+import { User, LoginResponse } from './types';
 
 // JWT Secrets from Encore configuration
 const JWT_ACCESS_SECRET = secret("JWT_ACCESS_SECRET");
@@ -32,6 +33,7 @@ export const REFRESH_TOKEN_COOKIE_OPTIONS = {
 export interface AccessTokenPayload {
   sub: string;           // User ID
   email: string;         // User email
+  is_verified: boolean;  // User verification status
   iat: number;           // Issued at
   exp: number;           // Expires at
   type: 'access';        // Token type
@@ -50,11 +52,12 @@ export const generateJTI = (): string => {
   return crypto.randomBytes(16).toString('hex');
 };
 
-// Generate access token
-export const generateAccessToken = (userId: string, email: string): string => {
+// Generate access token from User object
+export const generateAccessToken = (user: User): string => {
   const payload: Omit<AccessTokenPayload, 'iat' | 'exp'> = {
-    sub: userId,
-    email,
+    sub: user.id,
+    email: user.email,
+    is_verified: user.is_verified,
     type: 'access'
   };
 
@@ -84,12 +87,24 @@ export const generateRefreshToken = (userId: string): { token: string; jti: stri
   return { token, jti };
 };
 
-// Generate token pair (access + refresh)
-export const generateTokenPair = (userId: string, email: string): { accessToken: string; refreshToken: string; jti: string } => {
-  const accessToken = generateAccessToken(userId, email);
-  const { token: refreshToken, jti } = generateRefreshToken(userId);
+// Generate token pair (access + refresh) from User object
+export const generateTokenPair = (user: User): { accessToken: string; refreshToken: string; jti: string } => {
+  const accessToken = generateAccessToken(user);
+  const { token: refreshToken, jti } = generateRefreshToken(user.id);
   
   return { accessToken, refreshToken, jti };
+};
+
+// Generate LoginResponse from User object and token
+export const generateLoginResponse = (user: User, token: string): LoginResponse => {
+  return {
+    user: {
+      id: user.id,
+      email: user.email,
+      is_verified: user.is_verified,
+    },
+    token
+  };
 };
 
 // Validate access token
@@ -141,11 +156,12 @@ export const validateRefreshToken = (token: string): RefreshTokenPayload => {
 };
 
 // Extract user info from access token (for middleware)
-export const extractUserFromToken = (token: string): { userId: string; email: string } => {
+export const extractUserFromToken = (token: string): { userId: string; email: string; is_verified: boolean } => {
   const payload = validateAccessToken(token);
   return {
     userId: payload.sub,
-    email: payload.email
+    email: payload.email,
+    is_verified: payload.is_verified
   };
 };
 
