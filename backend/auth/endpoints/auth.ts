@@ -1,4 +1,4 @@
-import { api, APIError } from "encore.dev/api";
+import { api, APIError, Cookie, Header } from "encore.dev/api";
 import { db } from "../db";
 import {
   generateTokenPair,
@@ -8,8 +8,6 @@ import {
 } from "../jwt";
 import { User, RegisterRequest, LoginRequest } from "../types";
 import { hashPassword, verifyPassword, generateVerificationToken } from "../utils/password";
-import { setCookies, clearCookies } from "../utils/cookies";
-import { streamToString } from "../utils/validation";
 import { 
   storeRefreshToken,
   isRefreshTokenValid,
@@ -23,347 +21,336 @@ export interface AuthenticatedUser {
   is_verified: boolean;
 }
 
-// Authentication endpoints using raw API for cookie management
-export const signup = api.raw(
+// Response interfaces with native cookie support
+export interface SignupResponse {
+  user: AuthenticatedUser;
+  access_token: string;
+  // Set cookies in response
+  accessToken: Cookie<string, "access_token">;
+  refreshToken: Cookie<string, "refresh_token">;
+}
+
+export interface SigninResponse {
+  user: AuthenticatedUser;
+  access_token: string;
+  // Set cookies in response
+  accessToken: Cookie<string, "access_token">;
+  refreshToken: Cookie<string, "refresh_token">;
+}
+
+export interface RefreshResponse {
+  success: boolean;
+  // Set new cookies in response
+  accessToken: Cookie<string, "access_token">;
+  refreshToken: Cookie<string, "refresh_token">;
+}
+
+export interface LogoutResponse {
+  success: boolean;
+  // Clear cookies in response
+  accessToken: Cookie<string, "access_token">;
+  refreshToken: Cookie<string, "refresh_token">;
+}
+
+// Request interfaces with native cookie support
+export interface RefreshRequest {
+  refreshToken: Cookie<string, "refresh_token">;
+}
+
+export interface LogoutRequest {
+  refreshToken?: Cookie<string, "refresh_token">;
+}
+
+export interface MeRequest {
+  // Try Authorization header first, then fall back to cookie
+  authorization?: Header<"Authorization">;
+  accessToken?: Cookie<string, "access_token">;
+}
+
+// Authentication endpoints using native cookie support
+export const signup = api(
   { method: "POST", path: "/auth/signup", expose: true },
-  async (req, res) => {
-    try {
-      const body = JSON.parse(await streamToString(req)) as RegisterRequest;
-
-      // Validate input
-      if (!body.email || !body.password) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ 
-          code: "invalid_argument", 
-          message: "Email and password are required" 
-        }));
-        return;
-      }
-
-      if (body.password.length < 6) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ 
-          code: "invalid_argument", 
-          message: "Password must be at least 6 characters long" 
-        }));
-        return;
-      }
-
-      // Check if user already exists
-      const existingUser = await db.queryRow`
-        SELECT id FROM users WHERE email = ${body.email}
-      `;
-
-      if (existingUser) {
-        res.writeHead(409, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ 
-          code: "already_exists", 
-          message: "User with this email already exists" 
-        }));
-        return;
-      }
-
-      // Hash password and create user with verification token
-      const passwordHash = await hashPassword(body.password);
-      const verificationToken = generateVerificationToken();
-      
-      const user = await db.queryRow<User>`
-        INSERT INTO users (email, password_hash, verification_token)
-        VALUES (${body.email}, ${passwordHash}, ${verificationToken})
-        RETURNING id, email, password_hash, is_verified, verification_token, reset_token, reset_token_expires, created_at, updated_at
-      `;
-
-      if (!user) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ 
-          code: "internal", 
-          message: "Failed to create user" 
-        }));
-        return;
-      }
-
-      // Generate JWT token pair using the full User object
-      const { accessToken, refreshToken, jti } = generateTokenPair(user);
-      
-      // Store refresh token for revocation tracking
-      await storeRefreshToken(user.id, jti);
-
-      // Set HTTP-only cookies
-      setCookies(res, accessToken, refreshToken);
-
-      // Send response using the new LoginResponse structure
-      const loginResponse = generateLoginResponse(user, accessToken);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(loginResponse));
-
-    } catch (error) {
-      console.error('Signup error:', error);
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ 
-        code: "internal", 
-        message: "Internal server error" 
-      }));
+  async (body: RegisterRequest): Promise<SignupResponse> => {
+    // Validate input
+    if (!body.email || !body.password) {
+      throw APIError.invalidArgument("Email and password are required");
     }
-  }
-);
 
-export const signin = api.raw(
-  { method: "POST", path: "/auth/signin", expose: true },
-  async (req, res) => {
-    try {
-      const body = JSON.parse(await streamToString(req)) as LoginRequest;
-
-      // Validate input
-      if (!body.email || !body.password) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ 
-          code: "invalid_argument", 
-          message: "Email and password are required" 
-        }));
-        return;
-      }
-
-      // Find user with all required fields
-      const user = await db.queryRow<User>`
-        SELECT id, email, password_hash, is_verified, verification_token, reset_token, reset_token_expires, created_at, updated_at 
-        FROM users 
-        WHERE email = ${body.email}
-      `;
-
-      if (!user) {
-        res.writeHead(401, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ 
-          code: "unauthenticated", 
-          message: "Invalid email or password" 
-        }));
-        return;
-      }
-
-      // Verify password
-      const isValidPassword = await verifyPassword(body.password, user.password_hash);
-      if (!isValidPassword) {
-        res.writeHead(401, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ 
-          code: "unauthenticated", 
-          message: "Invalid email or password" 
-        }));
-        return;
-      }
-
-      // Generate JWT token pair using the full User object
-      console.log('Generating tokens for user:', user.id, user.email);
-      const { accessToken, refreshToken, jti } = generateTokenPair(user);
-      console.log('Tokens generated successfully, jti:', jti);
-      
-      // Store refresh token for revocation tracking
-      console.log('Storing refresh token in database...');
-      await storeRefreshToken(user.id, jti);
-      console.log('Refresh token stored successfully');
-
-      // Set HTTP-only cookies
-      setCookies(res, accessToken, refreshToken);
-      console.log('Setting cookies for signin user:', user.email);
-
-      // Send response using the new LoginResponse structure
-      const loginResponse = generateLoginResponse(user, accessToken);
-      console.log('Sending successful signin response');
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(loginResponse));
-      console.log('Signin response sent successfully');
-
-    } catch (error) {
-      console.error('Signin error:', error);
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ 
-        code: "internal", 
-        message: "Internal server error" 
-      }));
+    if (body.password.length < 6) {
+      throw APIError.invalidArgument("Password must be at least 6 characters long");
     }
-  }
-);
 
-export const refresh = api.raw(
-  { method: "POST", path: "/auth/refresh", expose: true },
-  async (req, res) => {
-    try {
-      // Parse cookies from request headers
-      const cookies = req.headers.cookie || '';
-      const refreshTokenMatch = cookies.match(/refresh_token=([^;]+)/);
-      const refreshToken = refreshTokenMatch ? refreshTokenMatch[1] : null;
+    // Check if user already exists
+    const existingUser = await db.queryRow`
+      SELECT id FROM users WHERE email = ${body.email}
+    `;
 
-      if (!refreshToken) {
-        res.writeHead(401, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ 
-          code: "unauthenticated", 
-          message: "No refresh token provided" 
-        }));
-        return;
-      }
-
-      // Validate refresh token
-      const payload = validateRefreshToken(refreshToken);
-      
-      // Check if refresh token is still valid (not revoked)
-      const isValid = await isRefreshTokenValid(payload.jti);
-      if (!isValid) {
-        res.writeHead(401, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ 
-          code: "unauthenticated", 
-          message: "Refresh token revoked or expired" 
-        }));
-        return;
-      }
-
-      // Get user info with all required fields
-      const user = await db.queryRow<User>`
-        SELECT id, email, password_hash, is_verified, verification_token, reset_token, reset_token_expires, created_at, updated_at 
-        FROM users 
-        WHERE id = ${payload.sub}
-      `;
-
-      if (!user) {
-        res.writeHead(401, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ 
-          code: "unauthenticated", 
-          message: "User not found" 
-        }));
-        return;
-      }
-
-      // Generate new token pair using the full User object
-      const { accessToken, refreshToken: newRefreshToken, jti: newJti } = generateTokenPair(user);
-      
-      // Revoke old refresh token
-      await revokeRefreshToken(payload.jti);
-      
-      // Store new refresh token
-      await storeRefreshToken(user.id, newJti);
-
-      // Set new HTTP-only cookies
-      setCookies(res, accessToken, newRefreshToken);
-
-      // Send response
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true }));
-
-    } catch (error) {
-      console.error('Refresh error:', error);
-      res.writeHead(401, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ 
-        code: "unauthenticated", 
-        message: "Invalid refresh token" 
-      }));
+    if (existingUser) {
+      throw APIError.alreadyExists("User with this email already exists");
     }
-  }
-);
 
-export const logout = api.raw(
-  { method: "POST", path: "/auth/logout", expose: true },
-  async (req, res) => {
-    try {
-      // Parse cookies from request headers
-      const cookies = req.headers.cookie || '';
-      const refreshTokenMatch = cookies.match(/refresh_token=([^;]+)/);
-      const refreshToken = refreshTokenMatch ? refreshTokenMatch[1] : null;
+    // Hash password and create user with verification token
+    const passwordHash = await hashPassword(body.password);
+    const verificationToken = generateVerificationToken();
+    
+    const user = await db.queryRow<User>`
+      INSERT INTO users (email, password_hash, verification_token)
+      VALUES (${body.email}, ${passwordHash}, ${verificationToken})
+      RETURNING id, email, password_hash, is_verified, verification_token, reset_token, reset_token_expires, created_at, updated_at
+    `;
 
-      // Revoke refresh token if present
-      if (refreshToken) {
-        try {
-          const payload = validateRefreshToken(refreshToken);
-          await revokeRefreshToken(payload.jti);
-        } catch (error) {
-          // Token might be invalid, but we still want to clear cookies
-          console.log('Error revoking refresh token:', error);
-        }
-      }
-
-      // Clear cookies
-      clearCookies(res);
-
-      // Send response
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true }));
-
-    } catch (error) {
-      console.error('Logout error:', error);
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ 
-        code: "internal", 
-        message: "Internal server error" 
-      }));
+    if (!user) {
+      throw APIError.internal("Failed to create user");
     }
-  }
-);
 
-export const me = api.raw(
-  { method: "GET", path: "/auth/me", expose: true },
-  async (req, res) => {
-    try {
-      let accessToken: string | null = null;
+    // Generate JWT token pair using the full User object
+    const { accessToken, refreshToken, jti } = generateTokenPair(user);
+    
+    // Store refresh token for revocation tracking
+    await storeRefreshToken(user.id, jti);
 
-      // First try to get token from Authorization header
-      const authHeader = req.headers.authorization;
-      console.log('Authorization header:', authHeader ? 'present' : 'missing');
-      if (authHeader && authHeader.startsWith('Bearer ')) {
-        accessToken = authHeader.substring(7); // Remove 'Bearer ' prefix
-        console.log('Extracted token from Authorization header');
-      }
-
-      // If not found in header, try cookies as fallback
-      if (!accessToken) {
-        const cookies = req.headers.cookie || '';
-        console.log('Raw cookies:', cookies);
-        const accessTokenMatch = cookies.match(/access_token=([^;]+)/);
-        accessToken = accessTokenMatch ? accessTokenMatch[1] : null;
-        if (accessToken) {
-          console.log('Extracted token from cookies');
-        }
-      }
-
-      if (!accessToken) {
-        console.log('No access token found in Authorization header or cookies');
-        res.writeHead(401, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ 
-          code: "unauthenticated", 
-          message: "No access token provided" 
-        }));
-        return;
-      }
-
-      // Extract user info from access token (now includes is_verified)
-      const { userId, email, is_verified } = extractUserFromToken(accessToken);
-
-      // Verify user still exists and get full user data
-      const user = await db.queryRow<User>`
-        SELECT id, email, password_hash, is_verified, verification_token, reset_token, reset_token_expires, created_at, updated_at 
-        FROM users 
-        WHERE id = ${userId}
-      `;
-
-      if (!user) {
-        res.writeHead(401, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ 
-          code: "unauthenticated", 
-          message: "User not found" 
-        }));
-        return;
-      }
-
-      // Send response using AuthenticatedUser structure
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
+    // Return response with native cookies
+    const isProduction = process.env.NODE_ENV === 'production';
+    return {
+      user: {
         id: user.id,
         email: user.email,
         is_verified: user.is_verified,
-      }));
+      },
+      access_token: accessToken,
+      accessToken: {
+        value: accessToken,
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: isProduction ? "Strict" : "Lax",
+        maxAge: 30 * 60, // 30 minutes
+        path: "/",
+      },
+      refreshToken: {
+        value: refreshToken,
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: isProduction ? "Strict" : "Lax",
+        maxAge: 7 * 24 * 60 * 60, // 7 days
+        path: "/",
+      },
+    };
+  }
+);
 
-    } catch (error) {
-      console.error('Me error:', error);
-      res.writeHead(401, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ 
-        code: "unauthenticated", 
-        message: "Invalid access token" 
-      }));
+export const signin = api(
+  { method: "POST", path: "/auth/signin", expose: true },
+  async (body: LoginRequest): Promise<SigninResponse> => {
+    // Validate input
+    if (!body.email || !body.password) {
+      throw APIError.invalidArgument("Email and password are required");
     }
+
+    // Find user with all required fields
+    const user = await db.queryRow<User>`
+      SELECT id, email, password_hash, is_verified, verification_token, reset_token, reset_token_expires, created_at, updated_at 
+      FROM users 
+      WHERE email = ${body.email}
+    `;
+
+    if (!user) {
+      throw APIError.unauthenticated("Invalid email or password");
+    }
+
+    // Verify password
+    const isValidPassword = await verifyPassword(body.password, user.password_hash);
+    if (!isValidPassword) {
+      throw APIError.unauthenticated("Invalid email or password");
+    }
+
+    // Generate JWT token pair using the full User object
+    console.log('Generating tokens for user:', user.id, user.email);
+    const { accessToken, refreshToken, jti } = generateTokenPair(user);
+    console.log('Tokens generated successfully, jti:', jti);
+    
+    // Store refresh token for revocation tracking
+    console.log('Storing refresh token in database...');
+    await storeRefreshToken(user.id, jti);
+    console.log('Refresh token stored successfully');
+
+    console.log('Setting cookies for signin user:', user.email);
+
+    // Return response with native cookies
+    const isProduction = process.env.NODE_ENV === 'production';
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        is_verified: user.is_verified,
+      },
+      access_token: accessToken,
+      accessToken: {
+        value: accessToken,
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: isProduction ? "Strict" : "Lax",
+        maxAge: 30 * 60, // 30 minutes
+        path: "/",
+      },
+      refreshToken: {
+        value: refreshToken,
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: isProduction ? "Strict" : "Lax",
+        maxAge: 7 * 24 * 60 * 60, // 7 days
+        path: "/",
+      },
+    };
+  }
+);
+
+export const refresh = api(
+  { method: "POST", path: "/auth/refresh", expose: true },
+  async (req: RefreshRequest): Promise<RefreshResponse> => {
+    const refreshToken = req.refreshToken?.value;
+
+    if (!refreshToken) {
+      throw APIError.unauthenticated("No refresh token provided");
+    }
+
+    // Validate refresh token
+    const payload = validateRefreshToken(refreshToken);
+    
+    // Check if refresh token is still valid (not revoked)
+    const isValid = await isRefreshTokenValid(payload.jti);
+    if (!isValid) {
+      throw APIError.unauthenticated("Refresh token revoked or expired");
+    }
+
+    // Get user info with all required fields
+    const user = await db.queryRow<User>`
+      SELECT id, email, password_hash, is_verified, verification_token, reset_token, reset_token_expires, created_at, updated_at 
+      FROM users 
+      WHERE id = ${payload.sub}
+    `;
+
+    if (!user) {
+      throw APIError.unauthenticated("User not found");
+    }
+
+    // Generate new token pair using the full User object
+    const { accessToken, refreshToken: newRefreshToken, jti: newJti } = generateTokenPair(user);
+    
+    // Revoke old refresh token
+    await revokeRefreshToken(payload.jti);
+    
+    // Store new refresh token
+    await storeRefreshToken(user.id, newJti);
+
+    // Return response with new cookies
+    const isProduction = process.env.NODE_ENV === 'production';
+    return {
+      success: true,
+      accessToken: {
+        value: accessToken,
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: isProduction ? "Strict" : "Lax",
+        maxAge: 30 * 60, // 30 minutes
+        path: "/",
+      },
+      refreshToken: {
+        value: newRefreshToken,
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: isProduction ? "Strict" : "Lax",
+        maxAge: 7 * 24 * 60 * 60, // 7 days
+        path: "/",
+      },
+    };
+  }
+);
+
+export const logout = api(
+  { method: "POST", path: "/auth/logout", expose: true },
+  async (req: LogoutRequest): Promise<LogoutResponse> => {
+    const refreshToken = req.refreshToken?.value;
+
+    // Revoke refresh token if present
+    if (refreshToken) {
+      try {
+        const payload = validateRefreshToken(refreshToken);
+        await revokeRefreshToken(payload.jti);
+      } catch (error) {
+        // Token might be invalid, but we still want to clear cookies
+        console.log('Error revoking refresh token:', error);
+      }
+    }
+
+    // Return response that clears cookies
+    const isProduction = process.env.NODE_ENV === 'production';
+    return {
+      success: true,
+      accessToken: {
+        value: "",
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: isProduction ? "Strict" : "Lax",
+        maxAge: 0, // Clear cookie
+        path: "/",
+      },
+      refreshToken: {
+        value: "",
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: isProduction ? "Strict" : "Lax",
+        maxAge: 0, // Clear cookie
+        path: "/",
+      },
+    };
+  }
+);
+
+export const me = api(
+  { method: "GET", path: "/auth/me", expose: true },
+  async (req: MeRequest): Promise<AuthenticatedUser> => {
+    let accessToken: string | null = null;
+
+    // First try to get token from Authorization header
+    const authHeader = req.authorization;
+    console.log('Authorization header:', authHeader ? 'present' : 'missing');
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      accessToken = authHeader.substring(7); // Remove 'Bearer ' prefix
+      console.log('Extracted token from Authorization header');
+    }
+
+    // If not found in header, try cookies as fallback
+    if (!accessToken) {
+      accessToken = req.accessToken?.value || null;
+      if (accessToken) {
+        console.log('Extracted token from cookies');
+      }
+    }
+
+    if (!accessToken) {
+      console.log('No access token found in Authorization header or cookies');
+      throw APIError.unauthenticated("No access token provided");
+    }
+
+    // Extract user info from access token (now includes is_verified)
+    const { userId, email, is_verified } = extractUserFromToken(accessToken);
+
+    // Verify user still exists and get full user data
+    const user = await db.queryRow<User>`
+      SELECT id, email, password_hash, is_verified, verification_token, reset_token, reset_token_expires, created_at, updated_at 
+      FROM users 
+      WHERE id = ${userId}
+    `;
+
+    if (!user) {
+      throw APIError.unauthenticated("User not found");
+    }
+
+    // Return user data
+    return {
+      id: user.id,
+      email: user.email,
+      is_verified: user.is_verified,
+    };
   }
 ); 

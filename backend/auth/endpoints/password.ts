@@ -6,7 +6,6 @@ import {
   verifyPassword, 
   generateResetToken 
 } from "../utils/password";
-import { streamToString } from "../utils/validation";
 import { extractUserFromToken } from "../jwt";
 import { revokeAllUserTokens } from "../services/token-service";
 

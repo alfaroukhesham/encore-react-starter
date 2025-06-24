@@ -1,17 +1,3 @@
-import { IncomingMessage } from "http";
-
-/**
- * Convert HTTP stream to string
- */
-export const streamToString = (stream: IncomingMessage): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    stream.on('data', (chunk) => chunks.push(chunk));
-    stream.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
-    stream.on('error', reject);
-  });
-};
-
 /**
  * Validate email format (basic validation)
  */
