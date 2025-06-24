@@ -1,20 +1,26 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { loginUser, signupUser, clearError } from '../../store/authSlice';
 import { toast } from 'sonner';
 
-interface AuthFormProps {
-  onForgotPassword: () => void;
-}
-
-const AuthForm: React.FC<AuthFormProps> = ({ onForgotPassword }) => {
+const AuthForm: React.FC = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const dispatch = useAppDispatch();
-  const { isLoading, error } = useAppSelector((state) => state.auth);
+  const { isLoading, error, isAuthenticated } = useAppSelector((state) => state.auth);
   
-  const [isSignUp, setIsSignUp] = useState(false);
+  const isSignUp = location.pathname === '/register';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [hasAttemptedAuth, setHasAttemptedAuth] = useState(false);
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/dashboard');
+    }
+  }, [isAuthenticated, navigate]);
 
   // Handle Redux errors with toast notifications - only for user-initiated actions
   useEffect(() => {
@@ -43,9 +49,11 @@ const AuthForm: React.FC<AuthFormProps> = ({ onForgotPassword }) => {
       if (isSignUp) {
         await dispatch(signupUser({ email, password })).unwrap();
         toast.success('Account created successfully!');
+        navigate('/dashboard');
       } else {
         await dispatch(loginUser({ email, password })).unwrap();
         toast.success('Welcome back!');
+        navigate('/dashboard');
       }
     } catch (error: any) {
       // Error is already handled by Redux and useEffect
@@ -62,17 +70,12 @@ const AuthForm: React.FC<AuthFormProps> = ({ onForgotPassword }) => {
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
             {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
-            <button
-              type="button"
-              onClick={() => {
-                setIsSignUp(!isSignUp);
-                setHasAttemptedAuth(false); // Reset attempt flag when switching modes
-              }}
+            <Link
+              to={isSignUp ? '/login' : '/register'}
               className="font-medium text-indigo-600 hover:text-indigo-500"
-              disabled={isLoading}
             >
               {isSignUp ? 'Sign in' : 'Sign up'}
-            </button>
+            </Link>
           </p>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
@@ -115,14 +118,12 @@ const AuthForm: React.FC<AuthFormProps> = ({ onForgotPassword }) => {
 
           {!isSignUp && (
             <div className="flex items-center justify-end">
-              <button
-                type="button"
-                onClick={onForgotPassword}
-                disabled={isLoading}
+              <Link
+                to="/forgot-password"
                 className="text-sm text-indigo-600 hover:text-indigo-500"
               >
                 Forgot your password?
-              </button>
+              </Link>
             </div>
           )}
 

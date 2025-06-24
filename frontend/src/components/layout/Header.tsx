@@ -10,11 +10,16 @@ import {
     Avatar,
     Box
 } from '@mui/material';
-import { AccountCircle, Logout } from '@mui/icons-material';
+import { AccountCircle, Logout, Menu as MenuIcon } from '@mui/icons-material';
 import { useAuth } from '../../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 
-export function Header() {
+interface HeaderProps {
+    onMenuClick?: () => void;
+    showMenuButton?: boolean;
+}
+
+export function Header({ onMenuClick, showMenuButton = false }: HeaderProps) {
     const { user, logout, isAuthenticated } = useAuth();
     const navigate = useNavigate();
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -36,6 +41,19 @@ export function Header() {
     return (
         <AppBar position="static" className="bg-blue-600">
             <Toolbar>
+                {/* Mobile Menu Button */}
+                {showMenuButton && (
+                    <IconButton
+                        color="inherit"
+                        aria-label="open menu"
+                        edge="start"
+                        onClick={onMenuClick}
+                        sx={{ mr: 2 }}
+                    >
+                        <MenuIcon />
+                    </IconButton>
+                )}
+                
                 <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
                     CMS Portfolio
                 </Typography>

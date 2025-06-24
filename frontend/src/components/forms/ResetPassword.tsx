@@ -1,20 +1,26 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { resetPassword, clearError } from '../../store/authSlice';
 import { toast } from 'sonner';
 
-interface ResetPasswordProps {
-  token: string;
-  onSuccess: () => void;
-  onBack: () => void;
-}
-
-const ResetPassword: React.FC<ResetPasswordProps> = ({ token, onSuccess, onBack }) => {
+const ResetPassword: React.FC = () => {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const dispatch = useAppDispatch();
   const { isLoading, error } = useAppSelector((state) => state.auth);
   
+  const token = searchParams.get('token');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+
+  // Redirect if no token provided
+  useEffect(() => {
+    if (!token) {
+      toast.error('Invalid or missing reset token');
+      navigate('/login');
+    }
+  }, [token, navigate]);
 
   // Handle Redux errors with toast notifications
   useEffect(() => {
@@ -26,6 +32,11 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ token, onSuccess, onBack 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!token) {
+      toast.error('Invalid reset token');
+      return;
+    }
 
     if (!newPassword || !confirmPassword) {
       toast.error('Please fill in all fields');
@@ -45,12 +56,16 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ token, onSuccess, onBack 
     try {
       await dispatch(resetPassword({ token, newPassword })).unwrap();
       toast.success('Password reset successfully! You can now sign in with your new password.');
-      onSuccess();
+      navigate('/login');
     } catch (error: any) {
       // Error is already handled by Redux and useEffect
       console.error('Reset password error:', error);
     }
   };
+
+  if (!token) {
+    return null; // Will redirect via useEffect
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
@@ -112,14 +127,12 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ token, onSuccess, onBack 
               {isLoading ? 'Resetting...' : 'Reset Password'}
             </button>
             
-            <button
-              type="button"
-              onClick={onBack}
-              disabled={isLoading}
+            <Link
+              to="/login"
               className="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
             >
               Back to sign in
-            </button>
+            </Link>
           </div>
         </form>
       </div>
