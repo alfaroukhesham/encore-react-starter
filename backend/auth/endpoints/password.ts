@@ -1,4 +1,4 @@
-import { api, APIError } from "encore.dev/api";
+import { api, APIError, Cookie, Header } from "encore.dev/api";
 import { db } from "../db";
 import { User } from "../types";
 import { 
@@ -22,11 +22,20 @@ export interface ResetPasswordRequest {
 export interface ChangePasswordRequest {
   currentPassword: string;
   newPassword: string;
+  // Support both Authorization header and cookie authentication
+  authorization?: Header<"Authorization">;
+  accessToken?: Cookie<string, "access_token">;
+}
+
+// Response interfaces
+export interface PasswordResponse {
+  success: boolean;
+  message: string;
 }
 
 export const forgotPassword = api(
   { method: "POST", path: "/auth/forgot-password", expose: true },
-  async (req: ForgotPasswordRequest): Promise<{ success: boolean; message: string }> => {
+  async (req: ForgotPasswordRequest): Promise<PasswordResponse> => {
     if (!req.email) {
       throw APIError.invalidArgument("Email is required");
     }
@@ -71,7 +80,7 @@ export const forgotPassword = api(
 
 export const resetPassword = api(
   { method: "POST", path: "/auth/reset-password", expose: true },
-  async (req: ResetPasswordRequest): Promise<{ success: boolean; message: string }> => {
+  async (req: ResetPasswordRequest): Promise<PasswordResponse> => {
     if (!req.token || !req.newPassword) {
       throw APIError.invalidArgument("Token and new password are required");
     }
@@ -115,99 +124,68 @@ export const resetPassword = api(
   }
 );
 
-export const changePassword = api.raw(
+export const changePassword = api(
   { method: "POST", path: "/auth/change-password", expose: true },
-  async (req, res) => {
-    try {
-      const body = JSON.parse(await streamToString(req)) as ChangePasswordRequest;
+  async (req: ChangePasswordRequest): Promise<PasswordResponse> => {
+    let accessToken: string | null = null;
 
-      // Parse cookies from request headers
-      const cookies = req.headers.cookie || '';
-      const accessTokenMatch = cookies.match(/access_token=([^;]+)/);
-      const accessToken = accessTokenMatch ? accessTokenMatch[1] : null;
-
-      if (!accessToken) {
-        res.writeHead(401, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ 
-          code: "unauthenticated", 
-          message: "No access token provided" 
-        }));
-        return;
-      }
-
-      if (!body.currentPassword || !body.newPassword) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ 
-          code: "invalid_argument", 
-          message: "Current password and new password are required" 
-        }));
-        return;
-      }
-
-      if (body.newPassword.length < 6) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ 
-          code: "invalid_argument", 
-          message: "New password must be at least 6 characters long" 
-        }));
-        return;
-      }
-
-      // Extract user info from access token
-      const { userId } = extractUserFromToken(accessToken);
-
-      // Get user with current password hash
-      const user = await db.queryRow`
-        SELECT id, password_hash FROM users WHERE id = ${userId}
-      `;
-
-      if (!user) {
-        res.writeHead(401, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ 
-          code: "unauthenticated", 
-          message: "User not found" 
-        }));
-        return;
-      }
-
-      // Verify current password
-      const isValidPassword = await verifyPassword(body.currentPassword, user.password_hash);
-      if (!isValidPassword) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ 
-          code: "invalid_argument", 
-          message: "Current password is incorrect" 
-        }));
-        return;
-      }
-
-      // Hash new password
-      const passwordHash = await hashPassword(body.newPassword);
-
-      // Update user password
-      await db.exec`
-        UPDATE users 
-        SET password_hash = ${passwordHash}, updated_at = NOW()
-        WHERE id = ${user.id}
-      `;
-
-      // Revoke all other refresh tokens for this user (keep current session)
-      await revokeAllUserTokens(user.id);
-
-      // Send response
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        success: true,
-        message: "Password changed successfully"
-      }));
-
-    } catch (error) {
-      console.error('Change password error:', error);
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ 
-        code: "internal", 
-        message: "Internal server error" 
-      }));
+    // First try to get token from Authorization header
+    const authHeader = req.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      accessToken = authHeader.substring(7); // Remove 'Bearer ' prefix
     }
+
+    // If not found in header, try cookies as fallback
+    if (!accessToken) {
+      accessToken = req.accessToken?.value || null;
+    }
+
+    if (!accessToken) {
+      throw APIError.unauthenticated("No access token provided");
+    }
+
+    if (!req.currentPassword || !req.newPassword) {
+      throw APIError.invalidArgument("Current password and new password are required");
+    }
+
+    if (req.newPassword.length < 6) {
+      throw APIError.invalidArgument("New password must be at least 6 characters long");
+    }
+
+    // Extract user info from access token
+    const { userId } = extractUserFromToken(accessToken);
+
+    // Get user with current password hash
+    const user = await db.queryRow`
+      SELECT id, password_hash FROM users WHERE id = ${userId}
+    `;
+
+    if (!user) {
+      throw APIError.unauthenticated("User not found");
+    }
+
+    // Verify current password
+    const isValidPassword = await verifyPassword(req.currentPassword, user.password_hash);
+    if (!isValidPassword) {
+      throw APIError.invalidArgument("Current password is incorrect");
+    }
+
+    // Hash new password
+    const passwordHash = await hashPassword(req.newPassword);
+
+    // Update user password
+    await db.exec`
+      UPDATE users 
+      SET password_hash = ${passwordHash}, updated_at = NOW()
+      WHERE id = ${user.id}
+    `;
+
+    // Revoke all other refresh tokens for this user (keep current session)
+    await revokeAllUserTokens(user.id);
+
+    return {
+      success: true,
+      message: "Password changed successfully"
+    };
   }
 ); 
